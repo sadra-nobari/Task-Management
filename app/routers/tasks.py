@@ -1,11 +1,36 @@
-from sqlalchemy import Boolean, Column, Integer, String, DateTime
-from sqlalchemy.sql import func
-from .database import Base
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from .. import crud, schemas
+from ..database import get_db
 
-class Task(Base):
-    __tablename__ = "tasks"
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    description = Column(String, nullable=True)
-    is_completed = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+@router.post("/", response_model=schemas.TaskResponse)
+def create_task(task: schemas.TaskCreate, db: Session = Depends(get_db)):
+    return crud.create_task(db=db, task=task)
+
+@router.get("/", response_model=list[schemas.TaskResponse])
+def read_tasks(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    tasks = crud.get_tasks(db, skip=skip, limit=limit)
+    return tasks
+
+@router.get("/{task_id}", response_model=schemas.TaskResponse)
+def read_task(task_id: int, db: Session = Depends(get_db)):
+    db_task = crud.get_task(db, task_id=task_id)
+    if db_task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return db_task
+
+@router.put("/{task_id}", response_model=schemas.TaskResponse)
+def update_task(task_id: int, task_update: schemas.TaskUpdate, db: Session = Depends(get_db)):
+    db_task = crud.update_task(db, task_id=task_id, task_update=task_update)
+    if db_task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return db_task
+
+@router.delete("/{task_id}")
+def delete_task(task_id: int, db: Session = Depends(get_db)):
+    success = crud.delete_task(db, task_id=task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"ok": True}
